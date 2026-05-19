@@ -7,7 +7,29 @@ const OverallProjects = () => {
   const [loading, setLoading] = useState(true);
   const [allData, setAllData] = useState([]);
   const [stats, setStats] = useState({ R: 0, S: 0, SS: 0, totalProjects: 0 });
+  const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark');
   const chartRef = useRef(null);
+
+  useEffect(() => {
+    // Sync initially
+    setIsDark(document.documentElement.getAttribute('data-theme') === 'dark');
+
+    // Create a MutationObserver to listen for theme changes on root HTML element
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'data-theme') {
+          setIsDark(document.documentElement.getAttribute('data-theme') === 'dark');
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     fetchOverallData();
@@ -45,11 +67,11 @@ const OverallProjects = () => {
       });
 
       const total = counts.R + counts.S + counts.SS;
-      
+
       setAllData([
         { name: 'Regular (R)', value: total > 0 ? Number(((counts.R / total) * 100).toFixed(2)) : 0, color: '#d97706' },
         { name: 'Special (S)', value: total > 0 ? Number(((counts.S / total) * 100).toFixed(2)) : 0, color: '#ec4899' },
-        { name: 'Super Special (SS)', value: total > 0 ? Number(((counts.SS / total) * 100).toFixed(2)) : 0, color: '#4f46e5' }
+        { name: 'Super Special (SS)', value: total > 0 ? Number(((counts.SS / total) * 100).toFixed(2)) : 0, color: '#6366f1' }
       ]);
 
     } catch (error) {
@@ -63,11 +85,32 @@ const OverallProjects = () => {
     if (!chartRef.current) return;
     try {
       setLoading(true);
-      const canvas = await html2canvas(chartRef.current, { backgroundColor: '#ffffff', scale: 3 });
+
+      // Temporarily toggle to light mode to capture a clean white-bg download image
+      const originalTheme = document.documentElement.getAttribute('data-theme');
+      const wasDark = originalTheme === 'dark';
+
+      if (wasDark) {
+        document.documentElement.setAttribute('data-theme', 'light');
+        // Let state propagation & chart layout transition complete (150ms is perfect)
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+
+      const canvas = await html2canvas(chartRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 3,
+        useCORS: true
+      });
+
       const link = document.createElement('a');
       link.download = `overall_histogram_${new Date().toISOString().split('T')[0]}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
+
+      // Restore dark mode if it was dark originally
+      if (wasDark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
     } catch (error) {
       console.error("Error downloading histogram:", error);
       alert("Failed to download image");
@@ -90,33 +133,72 @@ const OverallProjects = () => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
-        <div style={{ background: 'white', padding: '1.5rem', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+        <div style={{
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff',
+          padding: '1.5rem',
+          borderRadius: '16px',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9',
+          boxShadow: 'var(--shadow-lg)'
+        }}>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700 }}>TOTAL REGULAR (R)</p>
-          <h3 style={{ fontSize: '2rem', color: '#d97706' }}>{stats.R}</h3>
+          <h3 style={{ fontSize: '2.5rem', color: '#d97706', marginTop: '0.5rem', fontWeight: 800 }}>{stats.R}</h3>
         </div>
-        <div style={{ background: 'white', padding: '1.5rem', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+        <div style={{
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff',
+          padding: '1.5rem',
+          borderRadius: '16px',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9',
+          boxShadow: 'var(--shadow-lg)'
+        }}>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700 }}>TOTAL SPECIAL (S)</p>
-          <h3 style={{ fontSize: '2rem', color: '#ec4899' }}>{stats.S}</h3>
+          <h3 style={{ fontSize: '2.5rem', color: '#ec4899', marginTop: '0.5rem', fontWeight: 800 }}>{stats.S}</h3>
         </div>
-        <div style={{ background: 'white', padding: '1.5rem', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+        <div style={{
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff',
+          padding: '1.5rem',
+          borderRadius: '16px',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9',
+          boxShadow: 'var(--shadow-lg)'
+        }}>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700 }}>TOTAL SUPER SPECIAL (SS)</p>
-          <h3 style={{ fontSize: '2rem', color: '#4f46e5' }}>{stats.SS}</h3>
+          <h3 style={{ fontSize: '2.5rem', color: '#6366f1', marginTop: '0.5rem', fontWeight: 800 }}>{stats.SS}</h3>
         </div>
       </div>
 
-      <div style={{ background: 'white', padding: '2.5rem', borderRadius: '24px', border: '1px solid #f1f5f9' }}>
-        <div ref={chartRef} style={{ background: 'white', padding: '10px' }}>
-          <h3 style={{ marginBottom: '2rem', color: 'var(--text-main)' }}>Global Material Distribution</h3>
+      <div style={{
+        background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff',
+        padding: '2.5rem',
+        borderRadius: '24px',
+        border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9',
+        boxShadow: 'var(--shadow-xl)'
+      }}>
+        <div ref={chartRef} style={{ background: isDark ? 'transparent' : '#ffffff', padding: '10px', borderRadius: '12px' }}>
+          <h3 style={{ marginBottom: '2rem', color: 'var(--text-main)', fontSize: '1.25rem', fontWeight: 700 }}>Global Material Distribution</h3>
           <div style={{ height: '400px', width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={allData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 600 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} domain={[0, 100]} />
-                <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} formatter={(value) => `${value}%`} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? 'rgba(255, 255, 255, 0.08)' : '#f1f5f9'} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 12, fontWeight: 600 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 12 }} domain={[0, 100]} />
+                <Tooltip
+                  cursor={{ fill: 'transparent' }}
+                  contentStyle={{
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: isDark ? '#1e293b' : '#ffffff',
+                    color: isDark ? '#f1f5f9' : '#1e293b',
+                    boxShadow: 'var(--shadow-lg)'
+                  }}
+                  formatter={(value) => `${value}%`}
+                />
                 <Bar dataKey="value" radius={[10, 10, 0, 0]} barSize={80}>
                   {allData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.color} />))}
-                  <LabelList dataKey="value" position="top" style={{ fill: '#1e293b', fontWeight: 800, fontSize: '16px' }} formatter={(value) => `${value}%`} />
+                  <LabelList
+                    dataKey="value"
+                    position="top"
+                    style={{ fill: isDark ? '#f1f5f9' : '#1e293b', fontWeight: 800, fontSize: '16px' }}
+                    formatter={(value) => `${value}%`}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -146,15 +228,16 @@ const OverallProjects = () => {
 
               const tableRows = allProjects.map(p => {
                 const projectItems = allItems.filter(i => i.estimation_id === p.id);
-                const statusColor = p.status === 'Approved' ? { bg: '#dcfce7', text: '#166534' } :
-                  p.status === 'Draft' ? { bg: '#f1f5f9', text: '#64748b' } :
-                    { bg: '#ffffff', text: '#1e293b' };
+                const statusColor = p.status === 'Running Project' ? { bg: '#dcfce7', text: '#166534' } :
+                  p.status === 'Drawing Approved' ? { bg: '#f1f5f9', text: '#64748b' } :
+                    p.status === 'Remark' ? { bg: '#fef9c3', text: '#a16207' } :
+                      { bg: '#ffffff', text: '#1e293b' };
 
                 return `<tr>
                   <td style="border: 1px solid #e2e8f0; padding: 8px;">${p.site_name || 'N/A'}</td>
                   <td style="border: 1px solid #e2e8f0; padding: 8px;">${p.client_name || 'N/A'}</td>
                   <td style="border: 1px solid #e2e8f0; padding: 8px;">${p.project_date || 'N/A'}</td>
-                  <td style="border: 1px solid #e2e8f0; padding: 8px; background-color: ${statusColor.bg}; color: ${statusColor.text};">${p.status || 'N/A'}</td>
+                  <td style="border: 1px solid #e2e8f0; padding: 8px; background-color: ${statusColor.bg}; color: ${statusColor.text};">${p.status === 'Remark' ? (p.remark || 'Remark') : (p.status || 'N/A')}</td>
                   <td style="border: 1px solid #e2e8f0; padding: 8px;">${projectItems.length}</td>
                   <td style="border: 1px solid #e2e8f0; padding: 8px;">${p.floor_plan_url || 'N/A'}</td>
                   <td style="border: 1px solid #e2e8f0; padding: 8px;">${p.site_photo_url || 'N/A'}</td>

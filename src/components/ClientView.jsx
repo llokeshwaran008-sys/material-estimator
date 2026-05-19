@@ -9,6 +9,28 @@ const ClientView = ({ projectId }) => {
   const [chartData, setChartData] = useState([]);
   const [password, setPassword] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark');
+
+  useEffect(() => {
+    // Sync initially
+    setIsDark(document.documentElement.getAttribute('data-theme') === 'dark');
+
+    // Create a MutationObserver to listen for theme changes on root HTML element
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'data-theme') {
+          setIsDark(document.documentElement.getAttribute('data-theme') === 'dark');
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated && projectId) fetchProjectDetails();
@@ -41,7 +63,7 @@ const ClientView = ({ projectId }) => {
       setChartData([
         { name: 'Regular (R)', value: Number(((counts.R / (total || 1)) * 100).toFixed(2)), count: counts.R, color: '#d97706' },
         { name: 'Special (S)', value: Number(((counts.S / (total || 1)) * 100).toFixed(2)), count: counts.S, color: '#ec4899' },
-        { name: 'Super Special (SS)', value: Number(((counts.SS / (total || 1)) * 100).toFixed(2)), count: counts.SS, color: '#4f46e5' }
+        { name: 'Super Special (SS)', value: Number(((counts.SS / (total || 1)) * 100).toFixed(2)), count: counts.SS, color: '#6366f1' }
       ]);
 
     } catch (error) {
@@ -92,33 +114,65 @@ const ClientView = ({ projectId }) => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem' }}>
-        <div className="glass-card" style={{ background: 'white', padding: '2rem' }}>
-          <h3 style={{ marginBottom: '1.5rem' }}>Material Distribution</h3>
+        <div className="glass-card" style={{ 
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff', 
+          padding: '2rem',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9',
+          boxShadow: 'var(--shadow-xl)'
+        }}>
+          <h3 style={{ marginBottom: '1.5rem', color: 'var(--text-main)', fontSize: '1.1rem', fontWeight: 700 }}>Material Distribution</h3>
           <div style={{ height: '300px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} domain={[0, 100]} />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? 'rgba(255, 255, 255, 0.08)' : '#f1f5f9'} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 10, fontWeight: 600 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 10 }} domain={[0, 100]} />
+                <Tooltip 
+                  contentStyle={{ 
+                    borderRadius: '12px', 
+                    border: 'none', 
+                    background: isDark ? '#1e293b' : '#ffffff', 
+                    color: isDark ? '#f1f5f9' : '#1e293b', 
+                    boxShadow: 'var(--shadow-lg)' 
+                  }}
+                />
                 <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                   {chartData.map((e, i) => (<Cell key={i} fill={e.color} />))}
-                  <LabelList dataKey="value" position="top" style={{ fontSize: 10, fontWeight: 700 }} formatter={(v) => `${v}%`} />
+                  <LabelList 
+                    dataKey="value" 
+                    position="top" 
+                    style={{ fill: isDark ? '#f1f5f9' : '#1e293b', fontWeight: 800, fontSize: '10px' }} 
+                    formatter={(v) => `${v}%`} 
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="glass-card" style={{ background: 'white', padding: '2rem' }}>
-          <h3 style={{ marginBottom: '1.5rem', textAlign: 'center' }}>Material Percentage</h3>
+        <div className="glass-card" style={{ 
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff', 
+          padding: '2rem',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9',
+          boxShadow: 'var(--shadow-xl)'
+        }}>
+          <h3 style={{ marginBottom: '1.5rem', textAlign: 'center', color: 'var(--text-main)', fontSize: '1.1rem', fontWeight: 700 }}>Material Percentage</h3>
           <div style={{ height: '300px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="value">
                   {chartData.map((e, i) => (<Cell key={i} fill={e.color} />))}
                 </Pie>
-                <Tooltip /><Legend />
+                <Tooltip 
+                  contentStyle={{ 
+                    borderRadius: '12px', 
+                    border: 'none', 
+                    background: isDark ? '#1e293b' : '#ffffff', 
+                    color: isDark ? '#f1f5f9' : '#1e293b', 
+                    boxShadow: 'var(--shadow-lg)' 
+                  }}
+                />
+                <Legend wrapperStyle={{ color: 'var(--text-main)' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>

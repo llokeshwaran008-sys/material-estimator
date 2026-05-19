@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import StatusBadgeDropdown from './StatusBadgeDropdown';
 
 const ProjectList = ({ onSelectProject }) => {
   const [projects, setProjects] = useState([]);
@@ -89,9 +90,12 @@ const ProjectList = ({ onSelectProject }) => {
                   <td>{project.client_name}</td>
                   <td>{new Date(project.project_date).toLocaleDateString()}</td>
                   <td>
-                    <span className={`badge badge-${(project.status || 'Draft').toLowerCase()}`}>
-                      {project.status || 'Draft'}
-                    </span>
+                    <StatusBadgeDropdown 
+                      project={project} 
+                      onStatusUpdated={(projectId, newStatus, newRemark) => {
+                        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, status: newStatus, remark: newRemark } : p));
+                      }} 
+                    />
                   </td>
                   <td style={{ textAlign: 'right', minWidth: '100px' }}>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'nowrap' }}>

@@ -4,6 +4,21 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { supabase } from '../supabaseClient';
 
+const CustomXAxisTick = ({ x, y, payload }) => {
+  let color = 'var(--text-muted)';
+  if (payload.value.includes('Regular')) color = '#d97706';
+  else if (payload.value.includes('Super Special')) color = '#6366f1';
+  else if (payload.value.includes('Special')) color = '#ec4899';
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={14} textAnchor="middle" fill={color} style={{ fontSize: 10, fontWeight: 700 }}>
+        {payload.value}
+      </text>
+    </g>
+  );
+};
+
 const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
   const chartRef = useRef(null);
   const pieChartRef = useRef(null);
@@ -15,12 +30,35 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
   const [chartData, setChartData] = useState([]);
   const [useManualChart, setUseManualChart] = useState(false);
   const [manualValues, setManualValues] = useState({ R: 33.33, S: 33.33, SS: 33.34 });
+  const [remarkText, setRemarkText] = useState('');
+  const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark');
 
   const options = [
     { value: 'Regular', label: 'Regular' },
     { value: 'Special', label: 'Special' },
     { value: 'Super Special', label: 'Super Special' }
   ];
+
+  useEffect(() => {
+    // Sync initially
+    setIsDark(document.documentElement.getAttribute('data-theme') === 'dark');
+
+    // Create a MutationObserver to listen for theme changes on root HTML element
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'data-theme') {
+          setIsDark(document.documentElement.getAttribute('data-theme') === 'dark');
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (projectId) fetchProjectDetails();
@@ -41,6 +79,7 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
 
       if (estimationError) throw estimationError;
       setProjectInfo(estimation);
+      setRemarkText(estimation.remark || '');
       setUseManualChart(estimation.use_manual_chart || false);
       if (estimation.use_manual_chart) {
         setManualValues({
@@ -89,7 +128,7 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
       setChartData([
         { name: 'Regular (R)', value: Number(manualValues.R), color: '#d97706' },
         { name: 'Special (S)', value: Number(manualValues.S), color: '#ec4899' },
-        { name: 'Super Special (SS)', value: Number(manualValues.SS), color: '#4f46e5' }
+        { name: 'Super Special (SS)', value: Number(manualValues.SS), color: '#6366f1' }
       ]);
       return;
     }
@@ -109,7 +148,7 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
       setChartData([
         { name: 'Regular (R)', value: 0, color: '#d97706' },
         { name: 'Special (S)', value: 0, color: '#ec4899' },
-        { name: 'Super Special (SS)', value: 0, color: '#4f46e5' }
+        { name: 'Super Special (SS)', value: 0, color: '#6366f1' }
       ]);
       return;
     }
@@ -117,7 +156,7 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
     setChartData([
       { name: 'Regular (R)', value: Number(((counts.R / total) * 100).toFixed(2)), count: counts.R, color: '#d97706' },
       { name: 'Special (S)', value: Number(((counts.S / total) * 100).toFixed(2)), count: counts.S, color: '#ec4899' },
-      { name: 'Super Special (SS)', value: Number(((counts.SS / total) * 100).toFixed(2)), count: counts.SS, color: '#4f46e5' }
+      { name: 'Super Special (SS)', value: Number(((counts.SS / total) * 100).toFixed(2)), count: counts.SS, color: '#6366f1' }
     ]);
   };
 
@@ -166,7 +205,8 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
         manual_r: manualValues.R,
         manual_s: manualValues.S,
         manual_ss: manualValues.SS,
-        status: projectInfo.status
+        status: projectInfo.status,
+        remark: remarkText
       }).eq('id', projectId);
 
       // 1. Delete existing items
@@ -251,20 +291,52 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
 
   const downloadHistogram = async () => {
     if (!chartRef.current) return;
-    const canvas = await html2canvas(chartRef.current, { backgroundColor: '#ffffff', scale: 3 });
-    const link = document.createElement('a');
-    link.download = `histogram_${projectInfo?.site_name}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    try {
+      const originalTheme = document.documentElement.getAttribute('data-theme');
+      const wasDark = originalTheme === 'dark';
+
+      if (wasDark) {
+        document.documentElement.setAttribute('data-theme', 'light');
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+
+      const canvas = await html2canvas(chartRef.current, { backgroundColor: '#ffffff', scale: 3, useCORS: true });
+      const link = document.createElement('a');
+      link.download = `histogram_${projectInfo?.site_name}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+
+      if (wasDark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const downloadPieChart = async () => {
     if (!pieChartRef.current) return;
-    const canvas = await html2canvas(pieChartRef.current, { backgroundColor: '#ffffff', scale: 3 });
-    const link = document.createElement('a');
-    link.download = `pie_chart_${projectInfo?.site_name}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    try {
+      const originalTheme = document.documentElement.getAttribute('data-theme');
+      const wasDark = originalTheme === 'dark';
+
+      if (wasDark) {
+        document.documentElement.setAttribute('data-theme', 'light');
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+
+      const canvas = await html2canvas(pieChartRef.current, { backgroundColor: '#ffffff', scale: 3, useCORS: true });
+      const link = document.createElement('a');
+      link.download = `pie_chart_${projectInfo?.site_name}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+
+      if (wasDark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const downloadPDF = async () => {
@@ -389,13 +461,13 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
           <h2 style={{ fontSize: '1.75rem', color: 'var(--text-main)', marginBottom: '0.5rem' }}>{projectInfo?.site_name}</h2>
           <p style={{ color: 'var(--text-muted)' }}>Client: <strong>{projectInfo?.client_name}</strong> | Date: <strong>{new Date(projectInfo?.project_date).toLocaleDateString()}</strong></p>
           <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <span className={`badge badge-${(projectInfo?.status || 'Draft').toLowerCase()}`} style={{ alignSelf: 'flex-start' }}>
-              {projectInfo?.status || 'Draft'}
+            <span className={`badge badge-${(projectInfo?.status || 'Drawing Approved').toLowerCase().replace(' ', '-')}`} style={{ alignSelf: 'flex-start' }}>
+              {projectInfo?.status === 'Remark' ? (remarkText || 'Remark') : (projectInfo?.status || 'Drawing Approved')}
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Update Status:</label>
               <select 
-                value={projectInfo?.status || 'Draft'} 
+                value={projectInfo?.status || 'Drawing Approved'} 
                 onChange={(e) => setProjectInfo({ ...projectInfo, status: e.target.value })}
                 style={{
                   background: 'var(--bg-main)',
@@ -408,11 +480,29 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
                   outline: 'none'
                 }}
               >
-                <option value="Draft">Draft</option>
-                <option value="Approved">Approved</option>
-                <option value="Ordered">Ordered</option>
+                <option value="Drawing Approved">Drawing Approved</option>
+                <option value="Running Project">Running Project</option>
+                <option value="Remark">Remark</option>
                 <option value="Completed">Completed</option>
               </select>
+              {projectInfo?.status === 'Remark' && (
+                <input 
+                  type="text" 
+                  placeholder="Enter custom remark..." 
+                  value={remarkText}
+                  onChange={(e) => setRemarkText(e.target.value)}
+                  style={{
+                    background: 'var(--bg-main)',
+                    border: '1px solid var(--input-border)',
+                    borderRadius: '8px',
+                    padding: '4px 8px',
+                    fontSize: '0.8rem',
+                    color: 'var(--text-main)',
+                    outline: 'none',
+                    width: '180px'
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -443,21 +533,45 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
 
       {/* Stats Cards Section */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-        <div style={{ background: 'white', padding: '1.25rem', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+        <div style={{ 
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff', 
+          padding: '1.25rem', 
+          borderRadius: '16px', 
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9',
+          boxShadow: 'var(--shadow-lg)'
+        }}>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Total Items</p>
-          <h4 style={{ fontSize: '1.5rem', color: '#1e293b' }}>{items.length}</h4>
+          <h4 style={{ fontSize: '1.5rem', color: 'var(--text-main)', marginTop: '4px' }}>{items.length}</h4>
         </div>
-        <div style={{ background: 'white', padding: '1.25rem', borderRadius: '16px', border: `1px solid #d9770633`, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+        <div style={{ 
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff', 
+          padding: '1.25rem', 
+          borderRadius: '16px', 
+          border: isDark ? '1px solid rgba(217, 119, 6, 0.3)' : '1px solid #d9770633',
+          boxShadow: 'var(--shadow-lg)'
+        }}>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Regular (R)</p>
-          <h4 style={{ fontSize: '1.5rem', color: '#d97706' }}>{chartData.find(d => d.name === 'Regular (R)')?.count || 0}</h4>
+          <h4 style={{ fontSize: '1.5rem', color: '#d97706', marginTop: '4px' }}>{chartData.find(d => d.name === 'Regular (R)')?.count || 0}</h4>
         </div>
-        <div style={{ background: 'white', padding: '1.25rem', borderRadius: '16px', border: `1px solid #ec489933`, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+        <div style={{ 
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff', 
+          padding: '1.25rem', 
+          borderRadius: '16px', 
+          border: isDark ? '1px solid rgba(236, 72, 153, 0.3)' : '1px solid #ec489933',
+          boxShadow: 'var(--shadow-lg)'
+        }}>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Special (S)</p>
-          <h4 style={{ fontSize: '1.5rem', color: '#ec4899' }}>{chartData.find(d => d.name === 'Special (S)')?.count || 0}</h4>
+          <h4 style={{ fontSize: '1.5rem', color: '#ec4899', marginTop: '4px' }}>{chartData.find(d => d.name === 'Special (S)')?.count || 0}</h4>
         </div>
-        <div style={{ background: '#1e293b', padding: '1.25rem', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-          <p style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Super Special (SS)</p>
-          <h4 style={{ fontSize: '1.5rem', color: '#4f46e5' }}>{chartData.find(d => d.name === 'Super Special (SS)')?.count || 0}</h4>
+        <div style={{ 
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff', 
+          padding: '1.25rem', 
+          borderRadius: '16px', 
+          border: isDark ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid #6366f133',
+          boxShadow: 'var(--shadow-lg)'
+        }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Super Special (SS)</p>
+          <h4 style={{ fontSize: '1.5rem', color: '#6366f1', marginTop: '4px' }}>{chartData.find(d => d.name === 'Super Special (SS)')?.count || 0}</h4>
         </div>
       </div>
 
@@ -605,50 +719,85 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem' }}>
-        <div className="glass-card" style={{ padding: '0', overflow: 'hidden' }}>
-          <div ref={chartRef} style={{ background: 'white', padding: '2.5rem', position: 'relative' }}>
-            <h3 style={{ marginBottom: '2rem', color: 'var(--text-main)' }}>Material Distribution</h3>
+        <div className="glass-card" style={{ 
+          padding: '0', 
+          overflow: 'hidden',
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9',
+          boxShadow: 'var(--shadow-xl)'
+        }}>
+          <div ref={chartRef} style={{ background: isDark ? 'transparent' : '#ffffff', padding: '2.5rem', position: 'relative' }}>
+            <div style={{ position: 'absolute', top: '15px', right: '20px', textAlign: 'right' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>Material Legend</div>
+              {chartData.map(item => (
+                <div key={item.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', marginBottom: '2px' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>{item.name}</span>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '1px', background: item.color }}></div>
+                </div>
+              ))}
+            </div>
+            <h3 style={{ color: 'var(--text-main)', fontSize: '1.25rem', fontWeight: 700, marginBottom: projectInfo?.site_name ? '0.25rem' : '2rem' }}>Material Distribution</h3>
+            {projectInfo?.site_name && <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 700, marginBottom: '1.5rem', textTransform: 'uppercase' }}>Site: {projectInfo.site_name}</div>}
             <div style={{ height: '300px', width: '100%' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} domain={[0, 100]} />
-                  <Tooltip formatter={(value, name, props) => props?.payload ? [`Count: ${props.payload.count}`, `${name}: ${value}%`] : [`${name}: ${value}%`]} />
-                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? 'rgba(255, 255, 255, 0.08)' : '#f1f5f9'} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 10 }} domain={[0, 100]} />
+                  <Tooltip 
+                    cursor={{ fill: 'transparent' }} 
+                    contentStyle={{ 
+                      borderRadius: '12px', 
+                      border: 'none', 
+                      background: isDark ? '#1e293b' : '#ffffff', 
+                      color: isDark ? '#f1f5f9' : '#1e293b', 
+                      boxShadow: 'var(--shadow-lg)' 
+                    }}
+                    formatter={(value, name, props) => props?.payload ? [`Count: ${props.payload.count}`, `${name}: ${value}%`] : [`${name}: ${value}%`]} 
+                  />
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
                     {chartData.map((e, i) => (<Cell key={i} fill={e.color} />))}
-                    <LabelList dataKey="value" position="top" style={{ fill: '#1e293b', fontWeight: 800, fontSize: '10px' }} formatter={(val, entry) => entry?.payload ? `${entry.payload.count} (${val}%)` : `${val}%`} />
+                    <LabelList 
+                      dataKey="value" 
+                      position="top" 
+                      style={{ fill: isDark ? '#f1f5f9' : '#1e293b', fontWeight: 800, fontSize: '12px' }} 
+                      formatter={(val, entry) => entry?.payload ? `${entry.payload.count} (${val}%)` : `${val}%`} 
+                    />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            {projectInfo?.site_name && (
-              <div style={{ position: 'absolute', bottom: '15px', right: '20px', textAlign: 'right' }}>
-                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>SITE NAME</div>
-                <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary)' }}>{projectInfo.site_name}</div>
-              </div>
-            )}
           </div>
         </div>
-        <div className="glass-card" style={{ padding: '2.5rem', background: 'white', position: 'relative' }}>
-          <div ref={pieChartRef} style={{ background: 'white', position: 'relative' }}>
-            <h3 style={{ marginBottom: '1.5rem', textAlign: 'center' }}>Material Percentage</h3>
+        <div className="glass-card" style={{ 
+          padding: '2.5rem', 
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9',
+          position: 'relative',
+          boxShadow: 'var(--shadow-xl)'
+        }}>
+          <div ref={pieChartRef} style={{ background: isDark ? 'transparent' : '#ffffff', position: 'relative' }}>
+            <h3 style={{ color: 'var(--text-main)', fontSize: '1.25rem', textAlign: 'center', fontWeight: 700, marginBottom: projectInfo?.site_name ? '0.25rem' : '1.5rem' }}>Material Percentage</h3>
+            {projectInfo?.site_name && <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 700, marginBottom: '1.25rem', textAlign: 'center', textTransform: 'uppercase' }}>Site: {projectInfo.site_name}</div>}
             <div style={{ height: '300px', width: '100%' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="value">
                     {chartData.map((e, i) => (<Cell key={i} fill={e.color} />))}
                   </Pie>
-                  <Tooltip /><Legend />
+                  <Tooltip 
+                    contentStyle={{ 
+                      borderRadius: '12px', 
+                      border: 'none', 
+                      background: isDark ? '#1e293b' : '#ffffff', 
+                      color: isDark ? '#f1f5f9' : '#1e293b', 
+                      boxShadow: 'var(--shadow-lg)' 
+                    }}
+                  />
+                  <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ color: 'var(--text-main)' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            {projectInfo?.site_name && (
-              <div style={{ position: 'absolute', bottom: '15px', right: '20px', textAlign: 'right' }}>
-                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>SITE NAME</div>
-                <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary)' }}>{projectInfo.site_name}</div>
-              </div>
-            )}
           </div>
         </div>
       </div>

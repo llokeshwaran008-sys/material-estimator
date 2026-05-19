@@ -4,16 +4,56 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { supabase } from '../supabaseClient';
 
+const CustomXAxisTick = ({ x, y, payload }) => {
+  let color = 'var(--text-muted)';
+  if (payload.value.includes('Regular')) color = '#d97706';
+  else if (payload.value.includes('Super Special')) color = '#6366f1';
+  else if (payload.value.includes('Special')) color = '#ec4899';
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={14} textAnchor="middle" fill={color} style={{ fontSize: 10, fontWeight: 700 }}>
+        {payload.value}
+      </text>
+    </g>
+  );
+};
+
 const EstimationForm = () => {
   const chartRef = useRef(null);
   const pieChartRef = useRef(null);
   const pdfContainerRef = useRef(null);
 
+  // Theme detection
+  const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark');
+
+  useEffect(() => {
+    // Sync initially
+    setIsDark(document.documentElement.getAttribute('data-theme') === 'dark');
+
+    // Create a MutationObserver to listen for theme changes on root HTML element
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'data-theme') {
+          setIsDark(document.documentElement.getAttribute('data-theme') === 'dark');
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
   // State
   const [siteName, setSiteName] = useState('');
   const [clientName, setClientName] = useState('');
   const [projectDate, setProjectDate] = useState(new Date().toISOString().split('T')[0]);
-  const [status, setStatus] = useState('Draft');
+  const [status, setStatus] = useState('Drawing Approved');
+  const [remarkText, setRemarkText] = useState('');
   const [floorPlanUrl, setFloorPlanUrl] = useState(null);
   const [sitePhotoUrl, setSitePhotoUrl] = useState(null);
   const [useManualChart, setUseManualChart] = useState(false);
@@ -48,6 +88,7 @@ const EstimationForm = () => {
         if (parsed.clientName) setClientName(parsed.clientName);
         if (parsed.projectDate) setProjectDate(parsed.projectDate);
         if (parsed.status) setStatus(parsed.status);
+        if (parsed.remarkText) setRemarkText(parsed.remarkText);
         if (parsed.floorPlanUrl) setFloorPlanUrl(parsed.floorPlanUrl);
         if (parsed.sitePhotoUrl) setSitePhotoUrl(parsed.sitePhotoUrl);
       } catch (e) {
@@ -58,9 +99,9 @@ const EstimationForm = () => {
 
   // Save to LocalStorage
   useEffect(() => {
-    const dataToSave = { rows, siteName, clientName, projectDate, status, floorPlanUrl, sitePhotoUrl };
+    const dataToSave = { rows, siteName, clientName, projectDate, status, remarkText, floorPlanUrl, sitePhotoUrl };
     localStorage.setItem('estimation_pro_data', JSON.stringify(dataToSave));
-  }, [rows, siteName, clientName, projectDate]);
+  }, [rows, siteName, clientName, projectDate, status, remarkText]);
 
   const addRow = () => {
     setRows([...rows, {
@@ -106,7 +147,7 @@ const EstimationForm = () => {
     const getColor = (val) => {
       if (val === 'Regular' || val === 'R') return { bg: '#d97706', text: '#ffffff' };
       if (val === 'Special' || val === 'S') return { bg: '#ec4899', text: '#ffffff' };
-      if (val === 'Super Special' || val === 'SS') return { bg: '#4f46e5', text: '#ffffff' };
+      if (val === 'Super Special' || val === 'SS') return { bg: '#6366f1', text: '#ffffff' };
       return { bg: '#ffffff', text: '#1e293b' };
     };
 
@@ -153,20 +194,52 @@ const EstimationForm = () => {
 
   const downloadHistogram = async () => {
     if (!chartRef.current) return;
-    const canvas = await html2canvas(chartRef.current, { backgroundColor: '#ffffff', scale: 3 });
-    const link = document.createElement('a');
-    link.download = `histogram_${siteName || 'project'}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    try {
+      const originalTheme = document.documentElement.getAttribute('data-theme');
+      const wasDark = originalTheme === 'dark';
+
+      if (wasDark) {
+        document.documentElement.setAttribute('data-theme', 'light');
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+
+      const canvas = await html2canvas(chartRef.current, { backgroundColor: '#ffffff', scale: 3, useCORS: true });
+      const link = document.createElement('a');
+      link.download = `histogram_${siteName || 'project'}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+
+      if (wasDark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const downloadPieChart = async () => {
     if (!pieChartRef.current) return;
-    const canvas = await html2canvas(pieChartRef.current, { backgroundColor: '#ffffff', scale: 3 });
-    const link = document.createElement('a');
-    link.download = `pie_chart_${siteName || 'project'}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    try {
+      const originalTheme = document.documentElement.getAttribute('data-theme');
+      const wasDark = originalTheme === 'dark';
+
+      if (wasDark) {
+        document.documentElement.setAttribute('data-theme', 'light');
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+
+      const canvas = await html2canvas(pieChartRef.current, { backgroundColor: '#ffffff', scale: 3, useCORS: true });
+      const link = document.createElement('a');
+      link.download = `pie_chart_${siteName || 'project'}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+
+      if (wasDark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleSave = async () => {
@@ -179,6 +252,7 @@ const EstimationForm = () => {
           client_name: clientName,
           project_date: projectDate,
           status: status,
+          remark: remarkText,
           floor_plan_url: floorPlanUrl,
           site_photo_url: sitePhotoUrl,
           use_manual_chart: useManualChart,
@@ -262,7 +336,7 @@ const EstimationForm = () => {
       return [
         { name: 'Regular (R)', value: Number(manualValues.R), color: '#d97706' },
         { name: 'Special (S)', value: Number(manualValues.S), color: '#ec4899' },
-        { name: 'Super Special (SS)', value: Number(manualValues.SS), color: '#4f46e5' }
+        { name: 'Super Special (SS)', value: Number(manualValues.SS), color: '#6366f1' }
       ];
     }
 
@@ -281,14 +355,14 @@ const EstimationForm = () => {
       return [
         { name: 'Regular (R)', value: 0, color: '#d97706' },
         { name: 'Special (S)', value: 0, color: '#ec4899' },
-        { name: 'Super Special (SS)', value: 0, color: '#4f46e5' }
+        { name: 'Super Special (SS)', value: 0, color: '#6366f1' }
       ];
     }
 
     return [
       { name: 'Regular (R)', value: Number(((counts.R / total) * 100).toFixed(2)), count: counts.R, color: '#d97706' },
       { name: 'Special (S)', value: Number(((counts.S / total) * 100).toFixed(2)), count: counts.S, color: '#ec4899' },
-      { name: 'Super Special (SS)', value: Number(((counts.SS / total) * 100).toFixed(2)), count: counts.SS, color: '#4f46e5' }
+      { name: 'Super Special (SS)', value: Number(((counts.SS / total) * 100).toFixed(2)), count: counts.SS, color: '#6366f1' }
     ];
   };
 
@@ -490,7 +564,7 @@ const EstimationForm = () => {
   const totalItems = rows.length;
 
   return (
-    <div className="estimation-wrapper" ref={pdfContainerRef} style={{ background: '#f8fafc', padding: '30px' }}>
+    <div className="estimation-wrapper" ref={pdfContainerRef} style={{ background: isDark ? 'transparent' : '#f8fafc', padding: '30px' }}>
       {/* 1. Header Info Section */}
       <div className="glass-card" style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
@@ -511,14 +585,34 @@ const EstimationForm = () => {
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>PROJECT DATE</label>
                 <input type="date" className="input-field" value={projectDate} onChange={(e) => setProjectDate(e.target.value)} />
               </div>
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>STATUS</label>
-                <select className="input-field" value={status} onChange={(e) => setStatus(e.target.value)} style={{ fontWeight: 600 }}>
-                  <option value="Draft">Draft</option>
-                  <option value="Approved">Approved</option>
-                  <option value="Ordered">Ordered</option>
-                  <option value="Completed">Completed</option>
-                </select>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', gridColumn: status === 'Remark' ? 'span 2' : 'span 1' }}>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>STATUS</label>
+                  <select 
+                    className="input-field" 
+                    value={status} 
+                    onChange={(e) => setStatus(e.target.value)} 
+                    style={{ fontWeight: 600 }}
+                  >
+                    <option value="Drawing Approved">Drawing Approved</option>
+                    <option value="Running Project">Running Project</option>
+                    <option value="Remark">Remark</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                {status === 'Remark' && (
+                  <div style={{ flex: 1, minWidth: '150px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>REMARK VALUE</label>
+                    <input 
+                      type="text" 
+                      placeholder="Enter custom remark..." 
+                      className="input-field" 
+                      value={remarkText} 
+                      onChange={(e) => setRemarkText(e.target.value)} 
+                      style={{ fontWeight: 600 }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -546,21 +640,45 @@ const EstimationForm = () => {
 
         {/* 3. Stats Cards Section */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
-          <div style={{ background: 'white', padding: '1.25rem', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+          <div style={{ 
+            background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff', 
+            padding: '1.25rem', 
+            borderRadius: '16px', 
+            border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9',
+            boxShadow: 'var(--shadow-lg)'
+          }}>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Total Items</p>
-            <h4 style={{ fontSize: '1.5rem', color: '#1e293b' }}>{totalItems}</h4>
+            <h4 style={{ fontSize: '1.5rem', color: 'var(--text-main)', marginTop: '4px' }}>{totalItems}</h4>
           </div>
-          <div style={{ background: 'white', padding: '1.25rem', borderRadius: '16px', border: `1px solid #d9770633`, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+          <div style={{ 
+            background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff', 
+            padding: '1.25rem', 
+            borderRadius: '16px', 
+            border: isDark ? '1px solid rgba(217, 119, 6, 0.3)' : '1px solid #d9770633',
+            boxShadow: 'var(--shadow-lg)'
+          }}>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Regular (R)</p>
-            <h4 style={{ fontSize: '1.5rem', color: '#d97706' }}>{counts.R}</h4>
+            <h4 style={{ fontSize: '1.5rem', color: '#d97706', marginTop: '4px' }}>{counts.R}</h4>
           </div>
-          <div style={{ background: 'white', padding: '1.25rem', borderRadius: '16px', border: `1px solid #ec489933`, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+          <div style={{ 
+            background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff', 
+            padding: '1.25rem', 
+            borderRadius: '16px', 
+            border: isDark ? '1px solid rgba(236, 72, 153, 0.3)' : '1px solid #ec489933',
+            boxShadow: 'var(--shadow-lg)'
+          }}>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Special (S)</p>
-            <h4 style={{ fontSize: '1.5rem', color: '#ec4899' }}>{counts.S}</h4>
+            <h4 style={{ fontSize: '1.5rem', color: '#ec4899', marginTop: '4px' }}>{counts.S}</h4>
           </div>
-          <div style={{ background: '#1e293b', padding: '1.25rem', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-            <p style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Super Special (SS)</p>
-            <h4 style={{ fontSize: '1.5rem', color: '#4f46e5' }}>{counts.SS}</h4>
+          <div style={{ 
+            background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff', 
+            padding: '1.25rem', 
+            borderRadius: '16px', 
+            border: isDark ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid #6366f133',
+            boxShadow: 'var(--shadow-lg)'
+          }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Super Special (SS)</p>
+            <h4 style={{ fontSize: '1.5rem', color: '#6366f1', marginTop: '4px' }}>{counts.SS}</h4>
           </div>
         </div>
       </div>
@@ -686,7 +804,7 @@ const EstimationForm = () => {
             />
           </div>
           <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4f46e5', display: 'block', marginBottom: '4px' }}>SUPER SPECIAL %</label>
+            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6366f1', display: 'block', marginBottom: '4px' }}>SUPER SPECIAL %</label>
             <input
               type="number"
               className="input-field"
@@ -717,10 +835,16 @@ const EstimationForm = () => {
       {/* 4. Visualizations Section */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem' }}>
         {/* Histogram */}
-        <div className="glass-card" style={{ padding: '0', overflow: 'hidden' }}>
-          <div ref={chartRef} style={{ background: 'white', padding: '2.5rem', position: 'relative', height: '100%' }}>
+        <div className="glass-card" style={{ 
+          padding: '0', 
+          overflow: 'hidden',
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9',
+          boxShadow: 'var(--shadow-xl)'
+        }}>
+          <div ref={chartRef} style={{ background: isDark ? 'transparent' : '#ffffff', padding: '2.5rem', position: 'relative', height: '100%' }}>
             <div style={{ position: 'absolute', top: '15px', right: '20px', textAlign: 'right' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', marginBottom: '5px' }}>Material Legend</div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>Material Legend</div>
               {chartData.map(item => (
                 <div key={item.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', marginBottom: '2px' }}>
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>{item.name}</span>
@@ -728,34 +852,51 @@ const EstimationForm = () => {
                 </div>
               ))}
             </div>
-            <h3 style={{ marginBottom: '2rem', color: 'var(--text-main)', fontSize: '1.25rem' }}>Material Distribution</h3>
+            <h3 style={{ color: 'var(--text-main)', fontSize: '1.25rem', fontWeight: 700, marginBottom: siteName ? '0.25rem' : '2rem' }}>Material Distribution</h3>
+            {siteName && <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 700, marginBottom: '1.5rem', textTransform: 'uppercase' }}>Site: {siteName}</div>}
             <div style={{ height: '300px', width: '100%' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} domain={[0, 100]} />
-                  <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} formatter={(value, name, props) => props?.payload ? [`Count: ${props.payload.count}`, `${name}: ${value}%`] : [`${name}: ${value}%`]} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? 'rgba(255, 255, 255, 0.08)' : '#f1f5f9'} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 10 }} domain={[0, 100]} />
+                  <Tooltip 
+                    cursor={{ fill: 'transparent' }} 
+                    contentStyle={{ 
+                      borderRadius: '12px', 
+                      border: 'none', 
+                      background: isDark ? '#1e293b' : '#ffffff', 
+                      color: isDark ? '#f1f5f9' : '#1e293b', 
+                      boxShadow: 'var(--shadow-lg)' 
+                    }} 
+                    formatter={(value, name, props) => props?.payload ? [`Count: ${props.payload.count}`, `${name}: ${value}%`] : [`${name}: ${value}%`]} 
+                  />
                   <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
                     {chartData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.color} />))}
-                    <LabelList dataKey="value" position="top" style={{ fill: '#1e293b', fontWeight: 800, fontSize: '12px' }} formatter={(val, entry) => entry?.payload ? `${entry.payload.count} (${val}%)` : `${val}%`} />
+                    <LabelList 
+                      dataKey="value" 
+                      position="top" 
+                      style={{ fill: isDark ? '#f1f5f9' : '#1e293b', fontWeight: 800, fontSize: '12px' }} 
+                      formatter={(val, entry) => entry?.payload ? `${entry.payload.count} (${val}%)` : `${val}%`} 
+                    />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            {siteName && (
-              <div style={{ position: 'absolute', bottom: '15px', right: '20px', textAlign: 'right' }}>
-                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>SITE NAME</div>
-                <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary)' }}>{siteName}</div>
-              </div>
-            )}
           </div>
         </div>
 
         {/* Pie Chart */}
-        <div className="glass-card" style={{ padding: '2.5rem', background: 'white', position: 'relative' }}>
-          <div ref={pieChartRef} style={{ background: 'white', padding: '1rem', position: 'relative' }}>
-            <h3 style={{ marginBottom: '1.5rem', color: 'var(--text-main)', fontSize: '1.25rem', textAlign: 'center' }}>Material Percentage</h3>
+        <div className="glass-card" style={{ 
+          padding: '2.5rem', 
+          background: isDark ? 'rgba(30, 41, 59, 0.4)' : '#ffffff',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9',
+          position: 'relative',
+          boxShadow: 'var(--shadow-xl)'
+        }}>
+          <div ref={pieChartRef} style={{ background: isDark ? 'transparent' : '#ffffff', padding: '1rem', position: 'relative' }}>
+            <h3 style={{ color: 'var(--text-main)', fontSize: '1.25rem', textAlign: 'center', fontWeight: 700, marginBottom: siteName ? '0.25rem' : '1.5rem' }}>Material Percentage</h3>
+            {siteName && <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 700, marginBottom: '1.25rem', textAlign: 'center', textTransform: 'uppercase' }}>Site: {siteName}</div>}
             <div style={{ height: '300px', width: '100%' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -772,24 +913,24 @@ const EstimationForm = () => {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip />
-                  <Legend layout="horizontal" verticalAlign="bottom" align="center" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      borderRadius: '12px', 
+                      border: 'none', 
+                      background: isDark ? '#1e293b' : '#ffffff', 
+                      color: isDark ? '#f1f5f9' : '#1e293b', 
+                      boxShadow: 'var(--shadow-lg)' 
+                    }}
+                  />
+                  <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ color: 'var(--text-main)' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            {siteName && (
-              <div style={{ position: 'absolute', bottom: '15px', right: '20px', textAlign: 'right' }}>
-                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>SITE NAME</div>
-                <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary)' }}>{siteName}</div>
-              </div>
-            )}
           </div>
         </div>
       </div>
 
-      <footer style={{ marginTop: '3rem', textAlign: 'center', color: 'var(--text-muted)', paddingBottom: '1rem', fontSize: '0.8rem' }}>
-        <p>© 2026 Estimation Pro Dashboard. Professional Reporting Tool.</p>
-      </footer>
+
     </div>
   );
 };
