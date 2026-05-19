@@ -68,10 +68,9 @@ const DashboardHome = ({ onNavigate }) => {
         completed: projects.filter(p => p.status === 'Completed').length
       });
 
-      const sliced = projects.slice(0, 3);
-      setRecentProjects(sliced);
-      if (sliced.length > 0) {
-        fetchProjectStats(sliced[0]);
+      setRecentProjects(projects);
+      if (projects.length > 0) {
+        fetchProjectStats(projects[0]);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -118,7 +117,7 @@ const DashboardHome = ({ onNavigate }) => {
         {/* 2. Recent Activity */}
         <div className="glass-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <h3 style={{ fontSize: '1.25rem', color: 'var(--text-main)' }}>Recent Projects</h3>
+            <h3 style={{ fontSize: '1.25rem', color: 'var(--text-main)' }}>All Projects</h3>
             <button onClick={() => onNavigate('view-projects')} style={{ color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>View All →</button>
           </div>
 
