@@ -36,7 +36,7 @@ const StatusBadgeDropdown = ({ project, onStatusUpdated }) => {
         .eq('id', project.id);
 
       if (error) throw error;
-      
+
       if (onStatusUpdated) {
         onStatusUpdated(project.id, newStatus, updateData.remark);
       }

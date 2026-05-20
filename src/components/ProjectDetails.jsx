@@ -33,6 +33,13 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
   const [remarkText, setRemarkText] = useState('');
   const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark');
 
+  // Share with Client modal state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [sharePassword, setSharePassword] = useState('');
+  const [shareSaving, setShareSaving] = useState(false);
+  const [shareSaved, setShareSaved] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
   const options = [
     { value: 'Regular', label: 'Regular' },
     { value: 'Special', label: 'Special' },
@@ -436,6 +443,29 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
     </div>
   );
 
+  const handleSaveSharePassword = async () => {
+    if (!sharePassword.trim()) { alert('Please enter a password!'); return; }
+    try {
+      setShareSaving(true);
+      const { error } = await supabase.from('estimations').update({ client_password: sharePassword.trim() }).eq('id', projectId);
+      if (error) throw error;
+      setProjectInfo({ ...projectInfo, client_password: sharePassword.trim() });
+      setShareSaved(true);
+    } catch (err) {
+      alert('Failed to save password: ' + err.message);
+    } finally {
+      setShareSaving(false);
+    }
+  };
+
+  const getShareLink = () => `${window.location.origin}${window.location.pathname}?client=${projectId}`;
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(getShareLink());
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 3000);
+  };
+
   return (
     <div ref={containerRef}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
@@ -444,7 +474,7 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
           Back to List
         </button>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button onClick={() => { onNavigate && onNavigate('client-view'); }} className="btn btn-outline" style={{ borderColor: '#6366f1', color: '#6366f1', padding: '8px 16px', fontSize: '0.8rem', gap: '8px' }}>
+          <button onClick={() => { setSharePassword(projectInfo?.client_password || ''); setShareSaved(false); setLinkCopied(false); setShowShareModal(true); }} className="btn btn-outline" style={{ borderColor: '#6366f1', color: '#6366f1', padding: '8px 16px', fontSize: '0.8rem', gap: '8px' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
             Share with Client
           </button>
@@ -801,6 +831,112 @@ const ProjectDetails = ({ projectId, onBack, onNavigate }) => {
           </div>
         </div>
       </div>
+
+      {/* Share with Client Modal */}
+      {showShareModal && (
+        <div onClick={() => setShowShareModal(false)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: isDark ? '#1e293b' : '#ffffff',
+            borderRadius: '20px', padding: '2.5rem', width: '100%', maxWidth: '460px',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.4)',
+            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #e2e8f0'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>Share with Client</h2>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>{projectInfo?.site_name}</p>
+              </div>
+              <button onClick={() => setShowShareModal(false)} style={{
+                background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem',
+                color: 'var(--text-muted)', lineHeight: 1, padding: '4px'
+              }}>×</button>
+            </div>
+
+            {/* Step 1 — Set Password */}
+            <div style={{
+              background: isDark ? 'rgba(99,102,241,0.1)' : '#f8faff',
+              border: '1px solid rgba(99,102,241,0.2)', borderRadius: '14px', padding: '1.25rem', marginBottom: '1rem'
+            }}>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+                Step 1 — Set Client Password
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="e.g. 1234567"
+                  value={sharePassword}
+                  onChange={e => { setSharePassword(e.target.value); setShareSaved(false); }}
+                  style={{ flex: 1, fontSize: '1rem', letterSpacing: '0.05em' }}
+                />
+                <button
+                  onClick={handleSaveSharePassword}
+                  disabled={shareSaving}
+                  style={{
+                    background: shareSaved ? '#10b981' : 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                    border: 'none', borderRadius: '10px', color: '#fff', padding: '0 1.25rem',
+                    fontWeight: 700, fontSize: '0.85rem', cursor: shareSaving ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', transition: 'all 0.2s'
+                  }}
+                >
+                  {shareSaving ? <div className="spinner-small" style={{ width: '16px', height: '16px' }}></div>
+                    : shareSaved ? '✓ Saved!' : 'Save'}
+                </button>
+              </div>
+              {shareSaved && (
+                <p style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '6px', fontWeight: 600 }}>
+                  ✓ Password saved to database!
+                </p>
+              )}
+            </div>
+
+            {/* Step 2 — Copy Link */}
+            <div style={{
+              background: isDark ? 'rgba(16,185,129,0.08)' : '#f0fdf9',
+              border: '1px solid rgba(16,185,129,0.2)', borderRadius: '14px', padding: '1.25rem', marginBottom: '1.5rem'
+            }}>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+                Step 2 — Copy & Send Link to Client
+              </p>
+              <div style={{
+                background: isDark ? 'rgba(0,0,0,0.3)' : '#e8f5f0', borderRadius: '10px', padding: '0.75rem',
+                fontSize: '0.75rem', color: 'var(--text-muted)', wordBreak: 'break-all', marginBottom: '0.75rem',
+                fontFamily: 'monospace'
+              }}>
+                {getShareLink()}
+              </div>
+              <button
+                onClick={handleCopyLink}
+                style={{
+                  width: '100%', background: linkCopied ? '#10b981' : 'linear-gradient(135deg,#10b981,#059669)',
+                  border: 'none', borderRadius: '10px', color: '#fff', padding: '0.75rem',
+                  fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s'
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                {linkCopied ? '✓ Link Copied!' : 'Copy Client Link'}
+              </button>
+            </div>
+
+            {/* Info Box */}
+            <div style={{
+              fontSize: '0.78rem', color: 'var(--text-muted)', background: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc',
+              borderRadius: '10px', padding: '1rem', lineHeight: 1.6
+            }}>
+              <strong style={{ color: 'var(--text-main)' }}>How it works:</strong><br/>
+              1. Save the password above 💾<br/>
+              2. Copy the link & send it to your client 🔗<br/>
+              3. Also share the password separately 🔑<br/>
+              4. Client opens the link, enters the password → Views estimation ✅
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

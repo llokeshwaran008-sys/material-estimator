@@ -11,8 +11,31 @@ import ClientView from './components/ClientView'
 import { motion, AnimatePresence } from 'framer-motion'
 
 function App() {
+  // Hooks must be at top — before any conditional return
   const [activeView, setActiveView] = useState('home');
   const [selectedProjectId, setSelectedProjectId] = useState(null);
+
+  // Check if URL has ?client=PROJECT_ID (client shared link)
+  const urlParams = new URLSearchParams(window.location.search);
+  const clientProjectId = urlParams.get('client');
+
+  // If it's a client link, show only ClientView — no admin sidebar
+  if (clientProjectId) {
+    return (
+      <>
+        <div className="bg-glow-1"></div>
+        <div className="bg-glow-2"></div>
+        <div style={{ minHeight: '100vh', padding: '2rem' }}>
+          <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
+            <h1 style={{ fontSize: '2rem', background: 'linear-gradient(to right, #6366f1, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'inline-block' }}>
+              Innovative Estimation
+            </h1>
+          </header>
+          <ClientView projectId={clientProjectId} />
+        </div>
+      </>
+    );
+  }
 
   const handleSelectProject = (id) => {
     setSelectedProjectId(id);

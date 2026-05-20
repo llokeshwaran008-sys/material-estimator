@@ -73,12 +73,26 @@ const ClientView = ({ projectId }) => {
     }
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (password === 'client123') { // Simple hardcoded password for now
-      setIsAuthenticated(true);
-    } else {
-      alert('Incorrect password!');
+    if (!password.trim()) return;
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('estimations')
+        .select('client_password')
+        .eq('id', projectId)
+        .single();
+      if (error) throw error;
+      if (data?.client_password && password.trim() === data.client_password) {
+        setIsAuthenticated(true);
+      } else {
+        alert('Incorrect password! Please check with your architect.');
+      }
+    } catch (err) {
+      alert('Error verifying password. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
